@@ -2,46 +2,31 @@ import os
 import logging
 import requests
 from telegram import Update
-from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
+from telegram.ext import Updater, MessageHandler, Filters
 
 logging.basicConfig(level=logging.INFO)
 
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-SYSTEM_PROMPT = """تو "برده حسام" هستی — دستیار هوشمند حسام.
-- همیشه به فارسی جواب بده
-- لحنت دوستانه و صمیمی باشه
-- مثل یه آدم واقعی جواب بده نه ربات
-- اگه پرسیدن حسام کجاست بگو الان در دسترس نیست
-- جواب‌هات کوتاه و مفید باشه"""
+SYSTEM_PROMPT = """تو "برده حسام" هستی.
+- فارسی جواب بده
+- دوستانه و صمیمی باش
+- اگه پرسیدن حسام کجاست بگو الان در دسترس نیست"""
 
-def ask_gemini(user_message):
+def ask_gemini(text):
     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-    data = {
-        "contents": [
-            {
-                "parts": [
-                    {"text": f"{SYSTEM_PROMPT}\n\nپیام کاربر: {user_message}"}
-                ]
-            }
-        ]
-    }
-    response = requests.post(url, json=data)
-    result = response.json()
-    return result["candidates"][0]["content"]["parts"][0]["text"]
+    r = requests.post(url, json={"contents":[{"parts":[{"text":f"{SYSTEM_PROMPT}\nپیام: {text}"}]}]})
+    return r.json()["candidates"][0]["content"]["parts"][0]["text"]
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_message = update.message.text
+def handle(update, context):
     try:
-        reply = ask_gemini(user_message)
-        await update.message.reply_text(reply)
+        reply = ask_gemini(update.message.text)
+        update.message.reply_text(reply)
     except Exception as e:
-        logging.error(f"Error: {e}")
-        await update.message.reply_text("یه مشکلی پیش اومد، بعداً دوباره امتحان کن!")
+        update.message.reply_text("مشکلی پیش اومد!")
 
-if __name__ == "__main__":
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    print("ربات در حال اجراست...")
-    app.run_polling()
+updater = Updater(TELEGRAM_TOKEN)
+updater.dispatcher.add_handler(MessageHandler(Filters.text & ~Filters.command, handle))
+updater.start_polling()
+updater.idle()
