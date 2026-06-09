@@ -1,6 +1,6 @@
 import os
 import logging
-import google.generativeai as genai
+import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, MessageHandler, filters, ContextTypes
 
@@ -9,9 +9,6 @@ logging.basicConfig(level=logging.INFO)
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
-
 SYSTEM_PROMPT = """تو "برده حسام" هستی — دستیار هوشمند حسام.
 - همیشه به فارسی جواب بده
 - لحنت دوستانه و صمیمی باشه
@@ -19,11 +16,26 @@ SYSTEM_PROMPT = """تو "برده حسام" هستی — دستیار هوشمن
 - اگه پرسیدن حسام کجاست بگو الان در دسترس نیست
 - جواب‌هات کوتاه و مفید باشه"""
 
+def ask_gemini(user_message):
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
+    data = {
+        "contents": [
+            {
+                "parts": [
+                    {"text": f"{SYSTEM_PROMPT}\n\nپیام کاربر: {user_message}"}
+                ]
+            }
+        ]
+    }
+    response = requests.post(url, json=data)
+    result = response.json()
+    return result["candidates"][0]["content"]["parts"][0]["text"]
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     try:
-        response = model.generate_content(f"{SYSTEM_PROMPT}\n\nپیام کاربر: {user_message}")
-        await update.message.reply_text(response.text)
+        reply = ask_gemini(user_message)
+        await update.message.reply_text(reply)
     except Exception as e:
         logging.error(f"Error: {e}")
         await update.message.reply_text("یه مشکلی پیش اومد، بعداً دوباره امتحان کن!")
